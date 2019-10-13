@@ -1,10 +1,9 @@
-#!/usr/bin/python2.7
 #
 
-program_name = 'EasyABC 1.3.7.8 2018-04-23'
+program_name = 'EasyABC 1.3.7.8 2019-10-09'
 
 # Copyright (C) 2011-2014 Nils Liberg (mail: kotorinl at yahoo.co.uk)
-# Copyright (C) 2015-2018 Seymour Shlien (mail: fy733@ncf.ca), Jan Wybren de Jong (jw_de_jong at yahoo dot com)
+# Copyright (C) 2015-2019 Seymour Shlien (mail: fy733@ncf.ca), Jan Wybren de Jong (jw_de_jong at yahoo dot com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
@@ -58,6 +57,7 @@ else:
 
 import os, os.path
 import wx
+WX4 = wx.version().startswith('4')
 
 if os.getenv('EASYABCDIR'):
     cwd = os.getenv('EASYABCDIR')
@@ -110,7 +110,16 @@ from wx.lib.embeddedimage import PyEmbeddedImage
 # from wx.lib.expando import ExpandoTextCtrl, EVT_ETC_LAYOUT_NEEDED # 1.3.7.3 [JWdJ] 2016-04-09
 from wx import GetTranslation as _
 from wxhelper import *
-from midiplayer import *
+# from midiplayer import *
+fluidsynth_available = False
+if wx.Platform != "__WXMAC__":
+    try:
+        from fluidsynthplayer import *
+        fluidsynth_available = True
+    except:
+        pass
+
+from wxmediaplayer import *
 from xml2abc_interface import xml_to_abc, abc_to_xml
 from midi2abc import midi_to_abc, Note, duration2abc
 # from midi_meta_data import midi_to_meta_data # 1.3.6.3 [JWdJ] 2015-04-22
@@ -131,7 +140,7 @@ if PY3:
 else:
     from Queue import Queue # 1.3.6.2 [JWdJ] 2015-02
 
-
+application_running = True
 
 if wx.Platform == "__WXMSW__":
     import win32api
@@ -501,7 +510,7 @@ def get_notes_from_abc(abc, exclude_grace_notes=False):
     # find and return ABC notes (including the text ranges)
     # 1.3.6.3 [JWDJ] 2015-3 made regex case sensitive again, because after typing Z and <space> a bar did not appear
     return [(note.start(0), note.end(0), note.group(0)) for note in
-            re.finditer(r"([_=^]?[[A-Ga-gz](,+|'+)?\d{0,2}(/\d{1,2}|/+)?)[><-]?", abc)]
+            re.finditer(r"([_=^]?[A-Ga-gz](,+|'+)?\d{0,2}(/\d{1,2}|/+)?)[><-]?", abc)]
 
 def copy_bar_symbols_from_first_voice(abc):
     # normalize line endings (necessary for ^ in regexp) and extract the header and the two voices
@@ -1680,7 +1689,8 @@ class MusicUpdateThread(threading.Thread):
                 # print(error_msg)
                 pass
             svg_tune = SvgTune(abc_tune, svg_files, error)
-            wx.PostEvent(self.notify_window, MusicUpdateDoneEvent(-1, svg_tune))
+            if application_running:
+                wx.PostEvent(self.notify_window, MusicUpdateDoneEvent(-1, svg_tune))
 
     # 1.3.6.2 [JWdJ] 2015-02 rewritten
     def ConvertAbcToSvg(self, abc_code, abc_header, clear_queue=True):
@@ -1783,8 +1793,8 @@ class RecordThread(threading.Thread):
         gmidi_in.append(self.midi_out)
         self.notes = []
         self.is_running = False
-        self.tick1 = wx.Sound(os.path.join(cwd, 'sound', 'tick1.wav'))
-        self.tick2 = wx.Sound(os.path.join(cwd, 'sound', 'tick2.wav'))
+        self.tick1 = wx_sound(os.path.join(cwd, 'sound', 'tick1.wav'))
+        self.tick2 = wx_sound(os.path.join(cwd, 'sound', 'tick2.wav'))
 
     def timedelta_microseconds(self, td):
         return td.seconds*1000000 + td.microseconds
@@ -1981,7 +1991,7 @@ class IncipitsFrame(wx.Dialog):
         for c in [self.edNumBars, self.edNumRepeats, self.edNumTitles, self.edNumRows, self.edSortFields]:
             c.SetValue(c.GetValue()) # this seems to be needed on OSX
 
-        sizer.Add(lb1,                  row=0, col=0, flag=wx.wx.ALL | wx.ALIGN_CENTER_VERTICAL, border=border)
+        sizer.Add(lb1,                  row=0, col=0, flag=wx.ALL | wx.ALIGN_CENTER_VERTICAL, border=border)
         sizer.Add(self.edNumBars,       row=0, col=1, flag=wx.EXPAND | wx.ALL | wx.ALIGN_CENTER_VERTICAL, border=border)
         sizer.Add(lb2,                  row=1, col=0, flag=wx.ALL | wx.ALIGN_CENTER_VERTICAL, border=border)
         sizer.Add(self.edNumRepeats,    row=1, col=1, flag=wx.EXPAND | wx.ALL | wx.ALIGN_CENTER_VERTICAL, border=border)
@@ -2079,20 +2089,21 @@ class AbcFileSettingsFrame(wx.Panel):
         self.SetBackgroundColour(wx.Colour(245, 244, 235))
         border = 4
 
-        PathEntry = namedtuple('PathEntry', 'name display_name tooltip add_default')
+        PathEntry = namedtuple('PathEntry', 'name display_name tooltip add_default wildcard')
 
         # 1.3.6.3 [JWDJ] 2015-04-27 replaced TextCtrl with ComboBox for easier switching of versions
         self.needed_path_entries = [
-            PathEntry('abcm2ps', _('abcm2ps executable:'), _('This executable is used to display the music'), True),
-            PathEntry('abc2midi', _('abc2midi executable:'), _('This executable is used to make the midi file'), True),
-            PathEntry('abc2abc', _('abc2abc executable:'), _('This executable is used to transpose the music'), True),
+            PathEntry('abcm2ps', _('abcm2ps executable:'), _('This executable is used to display the music'), True, None),
+            PathEntry('abc2midi', _('abc2midi executable:'), _('This executable is used to make the midi file'), True, None),
+            PathEntry('abc2abc', _('abc2abc executable:'), _('This executable is used to transpose the music'), True, None),
             # 1.3.6.4 [SS] 2015-06-22
-            PathEntry('midi2abc', _('midi2abc executable:'), _('This executable is used to disassemble the output midi file'), True),
-            PathEntry('gs', _('ghostscript executable:'), _('This executable is used to create PDF files'), False),
-            PathEntry('nwc2xml', _('nwc2xml executable:'), _('For NoteWorthy Composer - Windows only'), False),
-            PathEntry('midiplayer', _('midiplayer:'), _('Your preferred MIDI player'), False),
-            PathEntry('soundfont', _('soundfont:'), _('Your preferred Sound Font (.sf2)'), False)
+            PathEntry('midi2abc', _('midi2abc executable:'), _('This executable is used to disassemble the output midi file'), True, None),
+            PathEntry('gs', _('ghostscript executable:'), _('This executable is used to create PDF files'), False, None),
+            PathEntry('nwc2xml', _('nwc2xml executable:'), _('For NoteWorthy Composer - Windows only'), False, None),
+            PathEntry('midiplayer', _('midiplayer:'), _('Your preferred MIDI player'), False, None),
+            PathEntry('soundfont', _('soundfont:'), _('Your preferred Sound Font (.sf2)'), False, 'SoundFont (*.sf2)|*.sf2')
         ]
+
 
         if wx.Platform == "__WXMSW__":
             self.exe_file_mask = '*.exe'
@@ -2115,6 +2126,7 @@ class AbcFileSettingsFrame(wx.Panel):
             r = 0
 
         self.browsebutton_to_control = {}
+        self.browsebutton_to_wildcard = {}
         self.control_to_name = {}
         for entry in self.needed_path_entries:
             setting_name = '%s_path' % entry.name
@@ -2140,6 +2152,7 @@ class AbcFileSettingsFrame(wx.Panel):
 
             browse_button = wx.Button(self, -1, _('Browse...'))
             self.browsebutton_to_control[browse_button] = control
+            self.browsebutton_to_wildcard[browse_button] = entry.wildcard
             sizer.Add(wx.StaticText(self, -1, entry.display_name), row=r, col=0, flag=wx.ALL | wx.ALIGN_CENTER_VERTICAL, border=border)
             sizer.Add(control, row=r, col=1, flag=wx.ALL | wx.EXPAND | wx.ALIGN_CENTER_VERTICAL, border=border)
             sizer.Add(browse_button, row=r, col=2, flag=wx.ALL | wx.ALIGN_CENTER_VERTICAL, border=border)
@@ -2194,7 +2207,9 @@ class AbcFileSettingsFrame(wx.Panel):
 
     def OnBrowse(self, evt):
         control = self.browsebutton_to_control[evt.EventObject]
-        wildcard = self.exe_file_mask
+        wildcard = self.browsebutton_to_wildcard[evt.EventObject]
+        if (wildcard is None):
+            wildcard = self.exe_file_mask
         path = control.GetValue()
         default_dir, default_file = os.path.split(path) # 1.3.6.3 [JWDJ] uses current folder as default
         dlg = wx.FileDialog(
@@ -3436,7 +3451,10 @@ class MySearchFrame(wx.Frame):
     def __init__(self,parent,settings):
         wx.Frame.__init__(self, wx.GetApp().TopWindow, wx.ID_ANY, _("Search files"), style=wx.DEFAULT_FRAME_STYLE, name='searcher')
         # Add a panel so it looks the correct on all platforms
-        wx.Frame.SetDimensions(self, -1, -1, 380,400)
+        if WX4:
+            wx.Frame.SetSize(self, -1, -1, 380,400)
+        else:
+            wx.Frame.SetDimensions(self, -1, -1, 380,400)
         self.searchdata = ''
         searchfold = wx.StaticText(self, -1, _("Folder"))
         self.frame = parent
@@ -3476,7 +3494,7 @@ class MySearchFrame(wx.Frame):
 
     def On_browse_abcsearch(self, evt):
         ''' Selects the folder to open for searching'''
-        dlg = wx.DirDialog(self, _("Open"), _("Choose a folder"), wx.OPEN)
+        dlg = wx.DirDialog(self, _("Open"), _("Choose a folder"), wx.FD_OPEN)
         try:
             if dlg.ShowModal() == wx.ID_OK:
                 self.settings['searchfolder'] = dlg.GetPath()
@@ -3532,25 +3550,28 @@ class MySearchFrame(wx.Frame):
 
 # 1.3.6 [SS] 2014-11-30
     def find_abc_string(self, path, abckey, searchstring, list_ctrl):
-        f = open(path,'rb') # read in binary to avoid problem with EOL characters
+        f = open(path, 'rb') # read in binary to avoid problem with EOL characters
         wholefile = f.read()
         f.close()
         encoding = self.frame.get_encoding(wholefile)
         wholefile = wholefile.decode(encoding)
         loc = 0
-        searchstring = searchstring.decode(encoding)
-        #wholefile = wholefile.decode('utf-8')
+        if not PY3:
+            searchstring = searchstring.decode(encoding)
         lwholefile = wholefile.lower()
         while loc != -1:
-            loc = wholefile.find(abckey,loc)
+            loc = wholefile.find(abckey, loc)
             if loc == -1:
                 break
-            linend = wholefile.find('\n',loc)
+            linend = wholefile.find('\n', loc)
             if linend == -1:
                 break
-            index = lwholefile.find(searchstring,loc,linend)
+            index = lwholefile.find(searchstring, loc, linend)
             if index != -1:
-                list_ctrl.InsertStringItem(self.count, wholefile[loc+2:linend])
+                if PY3:
+                    list_ctrl.InsertItem(self.count, wholefile[loc+2:linend])
+                else:
+                    list_ctrl.InsertStringItem(self.count, wholefile[loc+2:linend])
                 self.searchpaths[self.count] = path
                 self.searchlocator[self.count] = index
                 #1.3.6
@@ -3639,11 +3660,16 @@ class MainFrame(wx.Frame):
         self.setup_menus()
         self.setup_toolbar()
         self.mc = None
-        if wx.Platform != "__WXMAC__":
+        self.load_settings()
+        
+        soundfont_path = settings.get('soundfont_path', None)
+        if fluidsynth_available and soundfont_path and os.path.exists(soundfont_path):
             try:
-                self.mc = FluidSynthPlayer(self, backend)
-            except:
+                self.mc = FluidSynthPlayer(soundfont_path)
+            except Exception as e:
+                error_msg = ''.join(traceback.format_exception(sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2])) + os.linesep + os.linesep.join(errors)
                 self.mc = None
+
         if self.mc is None:
             try:
                 backend = None
@@ -3657,9 +3683,9 @@ class MainFrame(wx.Frame):
                 self.mc = WxMediaPlayer(self, backend)
             except NotImplementedError:
               self.mc = DummyMidiPlayer()  # if media player not supported on this platform
-            
-        self.mc.OnAfterLoad = self.OnMediaLoaded
-        self.mc.OnAfterStop = self.OnAfterStop
+
+        self.mc.OnAfterLoad += self.OnMediaLoaded
+        self.mc.OnAfterStop += self.OnAfterStop
         # self.media_file_loaded = False
         self.play_music_thread = None
 
@@ -3726,7 +3752,8 @@ class MainFrame(wx.Frame):
         self.tune_list.SetDropTarget(MyFileDropTarget(self))
         self.music_pane.SetDropTarget(MyFileDropTarget(self))
         self.abc_assist_panel.SetDropTarget(MyFileDropTarget(self))
-        self.GetMenuBar().SetDropTarget(MyFileDropTarget(self))
+        if wx.Platform == "__WXMSW__":
+            self.GetMenuBar().SetDropTarget(MyFileDropTarget(self))
 
         self.tune_list_last_width = self.tune_list.GetSize().width
 
@@ -3755,7 +3782,7 @@ class MainFrame(wx.Frame):
         self.music_pane.Bind(wx.EVT_LEFT_DCLICK, self.OnMusicPaneDoubleClick)
         #self.music_pane.Bind(wx.EVT_KEY_DOWN, self.OnMusicPaneKeyDown)
 
-        self.load_settings(load_window_size_pos=True)
+        self.load_and_apply_settings(load_window_size_pos=True)
         self.restore_settings()
 
         self.update_controls_using_settings()
@@ -3909,7 +3936,7 @@ class MainFrame(wx.Frame):
                 if wx.Platform == "__WXMAC__":
                     self.preview.SetZoom(100)
 
-                if PY3:
+                if WX4:
                     if not self.preview.IsOk:
                         return
                 else:
@@ -4095,7 +4122,7 @@ class MainFrame(wx.Frame):
     def OnSettingsChanged(self):
         self.save_settings()
         for frame in wx.GetApp().GetAllFrames():
-            frame.load_settings()
+            frame.load_and_apply_settings()
 
     def OnToggleMusicPaneMaximize(self, evt):
         pane = self.manager.GetPane('tune preview')
@@ -4123,7 +4150,7 @@ class MainFrame(wx.Frame):
             evt.Skip()
 
     def play(self):
-        if self.settings['follow_score'] and self.current_page_index != 0:
+        if self.settings.get('follow_score', False) and self.current_page_index != 0:
             self.current_page_index = 0
             self.UpdateMusicPane()
         wx.CallAfter(self.mc.Play)
@@ -4316,7 +4343,10 @@ class MainFrame(wx.Frame):
                 # self.music_and_score_out_of_sync()
 
         # turning pages and going to next line has to be done slighty earlier
-        future_offset = offset + 300  # 0.3 seconds should do
+        if self.mc.unit_is_midi_tick:
+            future_offset = offset + 480  # one quarter note should do
+        else:
+            future_offset = offset + 300  # 0.3 seconds should do
         future_time_slice = self.future_time_slice
 
         if future_time_slice is None or not (future_time_slice.start <= future_offset < future_time_slice.stop):
@@ -4381,7 +4411,6 @@ class MainFrame(wx.Frame):
         self.follow_score_check.Show(state)
         self.UpdateTimingSliderVisibility()
         self.toolbar.Realize()
-        wx.Yield()
 
     def show_toolbar_panel(self, panel, visible):
         #for sizer_item in panel.Sizer.Children:
@@ -4448,15 +4477,12 @@ class MainFrame(wx.Frame):
         self.toolbar.AddSeparator()
 
         self.zoom_slider = self.add_slider_to_toolbar(_('Zoom'), False, 1000, 500, 3000, (30, 60), (130, 22))
-        if PY3:
-            self.zoom_slider.SetTickFreq(10)
-        else:
-            self.zoom_slider.SetTickFreq(10, 0)
+        wx_slider_set_tick_freq(self.zoom_slider, 10)
         self.Bind(wx.EVT_SLIDER, self.OnZoomSlider, self.zoom_slider)
         self.zoom_slider.Bind(wx.EVT_LEFT_DOWN, self.OnZoomSliderClick)
 
         # 1.3.6.2 [JWdJ] 2015-02-15 text 'Page' was drawn multiple times. Replaced StaticLabel with StaticText
-        self.cur_page_combo = self.add_combobox_to_toolbar(_('Page'), choices=['99 / 99'], style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        self.cur_page_combo = self.add_combobox_to_toolbar(_('Page'), choices=[' 1 / 1 '], style=wx.CB_DROPDOWN | wx.CB_READONLY)
         if self.cur_page_combo.GetCount() > 0:  #EPO
             self.cur_page_combo.Select(0)
         self.Bind(wx.EVT_COMBOBOX, self.OnPageSelected, self.cur_page_combo)
@@ -5428,7 +5454,7 @@ class MainFrame(wx.Frame):
             return
 
         if wx.Platform == "__WXMAC__":
-            text = text.replace('\r\n', '\r')
+            text = text.replace('\r\n', '\n')
         else:
             text = re.sub('\r+', '\r', text)
             if not '\n' in text:
@@ -5831,14 +5857,18 @@ class MainFrame(wx.Frame):
 
     def OnSave(self, evt):
         self.save()
+
     def OnSaveAs(self, evt):
         self.save_as()
+
     def OnQuit(self, evt):
         for frame in wx.GetApp().GetAllFrames():
             if not frame.Close():
                 break
+
     def do_command(self, cmd):
         self.editor.CmdKeyExecute(cmd)
+
     def OnUndo(self, evt):      self.do_command(stc.STC_CMD_UNDO)
     def OnRedo(self, evt):      self.do_command(stc.STC_CMD_REDO)
     def OnCut(self, evt):       self.do_command(stc.STC_CMD_CUT)
@@ -5846,6 +5876,7 @@ class MainFrame(wx.Frame):
     def OnPaste(self, evt):     self.do_command(stc.STC_CMD_PASTE)
     def OnDelete(self, evt):    self.do_command(stc.STC_CMD_CLEAR)
     def OnSelectAll(self, evt): self.do_command(stc.STC_CMD_SELECTALL)
+
     def OnFind(self, evt):
         if self.find_dialog:
             self.find_dialog.Raise()
@@ -5855,7 +5886,8 @@ class MainFrame(wx.Frame):
             self.replace_dialog.Destroy()
             self.replace_dialog = None
         self.find_dialog = wx.FindReplaceDialog(self, self.find_data, _("Find"))
-        wx.CallLater(300, self.find_dialog.Show, True)
+        wx.CallLater(1, self.find_dialog.Show, True)
+
     def OnReplace(self, evt):
         if self.replace_dialog:
             self.replace_dialog.Raise()
@@ -5865,10 +5897,9 @@ class MainFrame(wx.Frame):
             self.find_dialog.Destroy()
             self.find_dialog = None
         self.replace_dialog = wx.FindReplaceDialog(self, self.find_data, _("Find & Replace"), wx.FR_REPLACEDIALOG)
-        wx.CallLater(300, self.replace_dialog.Show, True)
+        wx.CallLater(1, self.replace_dialog.Show, True)
+
     def OnFindClose(self, evt):
-        #self.mni_find.Enable(True)
-        #self.mni_replace.Enable(True)
         evt.GetDialog().Destroy()
 
     def get_scintilla_find_flags(self):
@@ -5924,7 +5955,6 @@ class MainFrame(wx.Frame):
             self.editor.SetSelection(p1, p2)
             self.editor.EnsureVisible(self.editor.LineFromPosition(p2))
             self.editor.EnsureVisible(self.editor.LineFromPosition(p1))
-            ##wx.CallLater(1200, self.ScrollMusicPaneToMatchEditor, select_closest_note=True)
             break
         else:
             self.editor.SetSelection(p1, p2)
@@ -6103,7 +6133,7 @@ class MainFrame(wx.Frame):
             del self.settings['font']
             self.save_settings()
             for frame in wx.GetApp().GetAllFrames():
-                frame.load_settings()
+                frame.load_and_apply_settings()
                 frame.InitEditor()
 
     def ScrollMusicPaneToMatchEditor(self, select_closest_note=False, select_closest_page=False):
@@ -6934,10 +6964,13 @@ class MainFrame(wx.Frame):
         tempo_re = re.compile(r'^\s*(\d+\.\d+)\s+Metatext\s+tempo\s+=\s+(\d+\.\d+)\s+bpm')
         new_track_re = re.compile('^Track \d+ contains')
 
+        def timediff_in_seconds(first, last, bpm):
+            return (last - first) * 60 / bpm
+
         def time_value_to_milliseconds(value, tempos):
             tempos = [t for t in tempos if t[0] <= value]
             time_start, bpm, sec_until_time_start = tempos[-1]
-            sec = sec_until_time_start + ((value - time_start) * 60 / bpm)
+            sec = sec_until_time_start + timediff_in_seconds(time_start, value, bpm)
             return int(sec * 1000)
 
         def append_tempo(tempos, time_start, tempo):
@@ -6947,9 +6980,10 @@ class MainFrame(wx.Frame):
                 if later_start:
                     raise Exception('Cannot insert tempo at {0}'.format(time_start))
                 prev_start, prev_bpm, prev_sec_until_time_start = tempos[-1]
-                sec_until_time_start = prev_sec_until_time_start + ((time_start - prev_start) * 60 / prev_bpm)
+                sec_until_time_start = prev_sec_until_time_start + timediff_in_seconds(prev_start, time_start, prev_bpm)
             tempos.append((time_start, tempo, sec_until_time_start))
 
+        ticks_per_quarter = 480
         tempos = []
         notes = []
         row_col_midi_notes = defaultdict(lambda: defaultdict(int))
@@ -6996,22 +7030,26 @@ class MainFrame(wx.Frame):
                 m = note_re.match(line)
                 if m is not None:
                     time_value = float(m.group(1))
-                    time_in_ms = time_value_to_milliseconds(time_value, tempos)
+                    if self.mc.unit_is_midi_tick:
+                        converted_time = time_value * ticks_per_quarter
+                    else: 
+                        converted_time = time_value_to_milliseconds(time_value, tempos)
+
                     on_off = m.group(2)
                     channel = int(m.group(3))
                     note_num = int(m.group(4))
                     if on_off == 'on':
-                        note_start = time_in_ms
+                        note_start = converted_time
                         active_notes[(channel, note_num)] = MidiNote(note_start, None, indices, page_index, svg_row)
                     elif on_off == 'off':
-                        note_stop = time_in_ms
+                        note_stop = converted_time
                         note_on = active_notes.pop((channel, note_num), None)
                         if note_on is not None:
                             if page_index == note_on.page:
                                 notes.append(MidiNote(note_on.start, note_stop, indices.union(note_on.indices), page_index, svg_row))
                             else:
                                 notes.append(MidiNote(note_on.start, note_stop, note_on.indices, note_on.page, note_on.svg_row))
-                else:
+                elif not self.mc.unit_is_midi_tick:
                     m = tempo_re.match(line)
                     if m is not None:
                         tempo_start = float(m.group(1))
@@ -7398,7 +7436,7 @@ class MainFrame(wx.Frame):
             insert_item = tune_list.InsertStringItem
             set_item_data = tune_list.SetItemData
             get_item_count = tune_list.GetItemCount
-            if PY3:
+            if WX4:
                 insert_item = tune_list.InsertItem
                 set_item = tune_list.SetItem
             for xnum, title, line_no in tunes:
@@ -7499,7 +7537,7 @@ class MainFrame(wx.Frame):
         self.editor.SetLexer(stc.STC_LEX_CONTAINER)
         self.editor.SetProperty("fold", "0")
         self.editor.SetUseTabs(False)
-        if not PY3:
+        if not WX4:
             self.editor.SetUseAntiAliasing(True)
 
         if not font_face:
@@ -7714,18 +7752,26 @@ class MainFrame(wx.Frame):
         self.settings['reduced_margins'] = self.mni_reduced_margins.IsChecked()
         self.refresh_tunes()
 
-    def load_settings(self, load_window_size_pos=False, load_perspective=True):
+    def load_settings(self):
         try:
             settings = pickle.load(open(self.settings_file, 'rb'))
         except Exception:
             settings = {} # ignore non-existant settings file (it will be created when the program exits)
+        self.settings.update(settings)
+        return self.settings
+
+    def load_and_apply_settings(self, load_window_size_pos=False, load_perspective=True):
+        settings = self.load_settings()
+
         self.editor.SetZoom(settings.get('zoom', 0))
         if load_window_size_pos:
             # 1.3.6.3 [JWDJ] 2015-04-25 # sometimes window was unreachable because window_x and window_y set to -32000
             window_x = max(settings.get('window_x', 40), 0)
             window_y = max(settings.get('window_y', 40), 0)
-            dimensions = window_x, window_y, settings.get('window_width', 1000), settings.get('window_height', 800)
-            if PY3:
+            window_width = max(settings.get('window_width', 1000), 600)
+            window_height = max(settings.get('window_height', 800), 400)
+            dimensions = window_x, window_y, window_width, window_height
+            if WX4:
                 self.SetSize(*dimensions)
             else:
                 self.SetDimensions(*dimensions)
@@ -7750,7 +7796,6 @@ class MainFrame(wx.Frame):
         self.OnZoomSlider(None)
         self.Update()
         self.Refresh()
-        self.settings.update(settings)
         self.Maximize(settings.get('is_maximized', False))
 
         self.update_recent_files_menu()
@@ -7827,7 +7872,7 @@ class MainFrame(wx.Frame):
             dlg = wx.MessageDialog(self, _('abcm2ps was not found here. You need it to view the music. Go to settings and indicate the path.'), _('Warning'), wx.OK)
             dlg.ShowModal()
 
-        abc2midi_path = settings.get('abc2midi_path')
+        abc2midi_path = settings.get('abc2midi_path', '')
 
         if not abc2midi_path or not os.path.exists(abc2midi_path):
             abc2midi_path = get_default_path_for_executable('abc2midi')
@@ -8068,6 +8113,7 @@ an open source ABC editor for Windows, OSX and Linux. It is published under the 
 <li><a href="http://www.scintilla.org/">scintilla</a> for the text editor used for ABC code</li>
 <li><a href="http://www.mxm.dk/products/public/pythonmidi">python midi package</a> for the initial parsing of midi files to be imported</li>
 <li><a href="http://www.pygame.org/download.shtml">pygame</a> (which wraps <a href="http://sourceforge.net/apps/trac/portmedia/wiki/portmidi">portmidi</a>) for real-time midi input</li>
+<li><a href="http://www.fluidsynth.org/">FluidSynth</a> for playing midi (and made fit for Python by <a href="https://wim.vree.org/svgParse/index.html">Willem Vree</a>)</li>
 <li>Thanks to Guido Gonzato for providing the fields and command reference.
 <li><br>Many thanks to the translators: Valerio&nbsp;Pelliccioni, Guido&nbsp;Gonzato&nbsp;(italian), Bendix&nbsp;R&oslash;dgaard&nbsp;(danish), Fr&eacute;d&eacute;ric&nbsp;Aup&eacute;pin&nbsp;(french), Bernard&nbsp;Weichel&nbsp;(german) and Jan&nbsp;Wybren&nbsp;de&nbsp;Jong&nbsp;(dutch).</li>
 <li>Universal binaries of abcm2ps and abc2midi for OSX are available thanks to Chuck&nbsp;Boody.</li>
@@ -8308,6 +8354,7 @@ app = MyApp(0)
 #wx.lib.inspection.InspectionTool().Show()
 
 app.MainLoop()
+application_running = False
 current_locale = None
 app = None
 
