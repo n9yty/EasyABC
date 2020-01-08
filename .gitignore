@@ -60,3 +60,10 @@ dist
 .vscode
 *.spec
 *.sf2
+
+venv/
+bin/abc2abc
+bin/abc2midi
+bin/abcm2ps
+bin/midi2abc
+bin/nwc2xml

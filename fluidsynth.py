@@ -7,7 +7,7 @@
 '''
 
 import time, os
-from ctypes import c_int, c_double, c_char_p, byref, CDLL
+from ctypes import c_int, c_double, c_char_p, byref, CDLL, c_void_p
 # from ctypes.util import find_library
 
 import sys
@@ -33,21 +33,105 @@ try:
     F = CDLL(lib)
 except:
     try:
-        lib = './libfluidsynth-1.dll'
+        lib = './libfluidsynth.2.1.2.dylib'
         F = CDLL(lib)
+        print(dir(F))
         onLinux = 0
     except: 
         raise ImportError("Couldn't find the FluidSynth library in the program directory.")
-# print lib, 'loaded.'``
+# parameter and return types
+F.new_fluid_settings.restype = c_void_p
 
+F.fluid_settings_setnum.argtypes = [c_void_p, c_char_p, c_double]
+
+F.fluid_settings_setint.argtypes = [c_void_p, c_char_p, c_int]
+
+F.fluid_settings_setstr.argtypes = [c_void_p, c_char_p, c_char_p]
+
+F.new_fluid_synth.argtypes = [c_void_p]
+F.new_fluid_synth.restype = c_void_p
+
+F.new_fluid_audio_driver.argtype = [c_void_p, c_void_p]
+F.new_fluid_audio_driver.restype = c_void_p
+
+F.fluid_settings_getint.argtypes = [c_void_p, c_char_p, c_void_p]
+
+F.delete_fluid_audio_driver.argtypes = [c_void_p]
+
+F.delete_fluid_synth.argtypes = [c_void_p]
+
+F.delete_fluid_settings.argtypes = [c_void_p]
+
+F.fluid_synth_sfload.argtypes = [c_void_p, c_char_p, c_int]
+F.fluid_synth_sfload.restype = c_int
+
+F.fluid_synth_sfunload.argtypes = [c_void_p, c_int, c_int]
+F.fluid_synth_sfunload.restype = c_int
+
+F.fluid_synth_program_select.argtypes = [c_void_p, c_int, c_int, c_int, c_int]
+F.fluid_synth_program_select.restype = c_int
+
+F.fluid_synth_set_reverb.argtypes = [c_void_p, c_double, c_double, c_double, c_double]
+F.fluid_synth_set_reverb.restype = c_int
+
+F.fluid_synth_set_chorus.argtypes = [c_void_p, c_double, c_double, c_double, c_int]
+F.fluid_synth_set_chorus.restype = c_int
+
+F.fluid_synth_count_midi_channels.argtypes = [c_void_p]
+F.fluid_synth_count_midi_channels.restype = c_int
+
+F.fluid_synth_cc.argtypes = [c_void_p, c_int, c_int, c_int]
+
+F.new_fluid_player.argtypes = [c_void_p]
+F.new_fluid_player.restype = c_void_p
+
+F.fluid_player_add.argtypes = [c_void_p, c_char_p]
+
+F.fluid_player_play.argtypes = [c_void_p]
+
+F.fluid_player_stop.argtypes = [c_void_p]
+
+F.fluid_synth_all_notes_off.argtypes = [c_void_p, c_int]
+
+F.fluid_player_join.argtypes = [c_void_p]
+
+F.fluid_player_get_status.argtypes = [c_void_p]
+F.fluid_player_get_status.restype = c_int
+
+#F.fluid_player_get_ticks.argtypes = [c_void_p]
+#F.fluid_player_get_ticks.restype = c_int
+
+F.fluid_player_seek.argtypes = [c_void_p, c_int]
+F.fluid_player_seek.restype = c_int
+
+F.fluid_player_load_midi.argtypes = [c_void_p]
+
+F.fluid_player_track_duration.argtypes = [c_void_p, c_int]
+F.fluid_player_track_duration.restype = c_int
+
+F.delete_fluid_player.argtypes = [c_void_p]
+
+F.new_fluid_file_renderer.argtypes = [c_void_p]
+F.new_fluid_file_renderer.restype = c_void_p
+
+F.fluid_file_set_qual.argtypes = [c_void_p, c_double]
+
+F.fluid_file_renderer_process_block.argtypes = [c_void_p]
+F.fluid_file_renderer_process_block.restype = c_int
+
+F.delete_fluid_file_renderer.argtypes = [c_void_p]
+
+
+# print lib, 'loaded.'``
 
 class Synth:            # interface for the FluidSynth synthesizer
     def __init__(self, gain=0.2, samplerate=44100, bsize=64):
         st = F.new_fluid_settings()
-        F.fluid_settings_setnum(st, 'synth.gain', c_double(gain))
-        F.fluid_settings_setnum(st, 'synth.sample-rate', c_double(samplerate))
-        F.fluid_settings_setint(st, 'audio.period-size', bsize)
-        F.fluid_settings_setint(st, 'audio.periods', 2)
+        print(st)
+        F.fluid_settings_setnum(st, b'synth.gain', c_double(gain))
+        F.fluid_settings_setnum(st, b'synth.sample-rate', c_double(samplerate))
+        F.fluid_settings_setint(st, b'audio.period-size', bsize)
+        F.fluid_settings_setint(st, b'audio.periods', 2)
         self.settings = st
         self.synth = F.new_fluid_synth(st)
         self.audio_driver = None
@@ -55,15 +139,15 @@ class Synth:            # interface for the FluidSynth synthesizer
     def start(self, driver=None):   # initialize the audio driver
         if driver is not None:
             assert(driver in ['alsa', 'oss', 'jack', 'portaudio', 'sndmgr', 'coreaudio', 'dsound', 'pulseaudio']) 
-            F.fluid_settings_setstr(self.settings, 'audio.driver', driver)
+            F.fluid_settings_setstr(self.settings, b'audio.driver', b(driver))
         self.audio_driver = F.new_fluid_audio_driver(self.settings, self.synth)
         if not self.audio_driver:   # API returns 0 on error (not None)
             self.audio_driver = None
         else:   # print some info
             psize = c_int()    # integer for parameter passing by reference
-            F.fluid_settings_getint(self.settings, 'audio.period-size', byref(psize))
+            F.fluid_settings_getint(self.settings, b'audio.period-size', byref(psize))
             nper = c_int()
-            F.fluid_settings_getint(self.settings, 'audio.periods', byref(nper))
+            F.fluid_settings_getint(self.settings, b'audio.periods', byref(nper))
             # print 'audio.period-size:', psize.value, 'audio.periods:', nper.value, 'latency:', nper.value * psize.value * 1000 / 44100, 'msec'
 
     def delete(self):              # release all memory
@@ -99,12 +183,12 @@ class Synth:            # interface for the FluidSynth synthesizer
             F.fluid_synth_cc(self.synth, chan, 93, level) # midi control change #93 == chorus level
 
     def set_gain(self, gain):
-        F.fluid_settings_setnum(self.settings, 'synth.gain', c_double(gain))
+        F.fluid_settings_setnum(self.settings, b'synth.gain', c_double(gain))
     def set_buffer(self, size=0, driver=None):
         if self.audio_driver is not None:   # remove current audio driver
             F.delete_fluid_audio_driver(self.audio_driver)
         if size:
-            F.fluid_settings_setint(self.settings, 'audio.period-size', size)
+            F.fluid_settings_setint(self.settings, b'audio.period-size', size)
         self.start(driver)   # create new driver
 
 
@@ -133,8 +217,9 @@ class Player:               # interface for the FluidSynth internal midi player
         return F.fluid_player_get_status(self.player)
 
     def get_ticks(self):      # get current position in midi ticks
-        t = F.fluid_player_get_ticks(self.player)
-        return t
+        #t = F.fluid_player_get_tick(self.player)
+        #return t
+        return 0
 
     def seek(self, ticks_p):  # go to position ticks_p (in midi ticks)
         F.fluid_synth_all_notes_off(self.flsynth.synth, -1)   # -1 == all channels
@@ -167,7 +252,7 @@ class Player:               # interface for the FluidSynth internal midi player
             return
         F.fluid_file_set_qual(renderer, c_double(quality))
         k = c_int()         # get block size (samples are rendered one block at a time)
-        F.fluid_settings_getint(self.flsynth.settings, 'audio.period-size', byref(k))
+        F.fluid_settings_getint(self.flsynth.settings, b'audio.period-size', byref(k))
         n = 0               # sample counter
         while self.get_status() == 1:
             if F.fluid_file_renderer_process_block(renderer) != 0: # render one block
@@ -180,10 +265,10 @@ class Player:               # interface for the FluidSynth internal midi player
 
     def set_render_mode(self, file_name, file_type):  # set audio file and audio type
         st = self.flsynth.settings                     # should be called before the renderLoop
-        F.fluid_settings_setstr(st, "audio.file.name", c_char_p(b(file_name)))
-        F.fluid_settings_setstr(st, "audio.file.type", c_char_p(b(file_type)))
-        F.fluid_settings_setstr(st, "player.timing-source", "sample")
-        F.fluid_settings_setint(st, "synth.parallel-render", 1)
+        F.fluid_settings_setstr(st, b"audio.file.name", c_char_p(b(file_name)))
+        F.fluid_settings_setstr(st, b"audio.file.type", c_char_p(b(file_type)))
+        F.fluid_settings_setstr(st, b"player.timing-source", "sample")
+        F.fluid_settings_setint(st, b"synth.parallel-render", 1)
 
     def set_reverb(self, name):   # change reverb model parameters
         roomsize, damp, width, level = revmods.get(name, revmods [name])
