@@ -9,10 +9,13 @@ faulthandler.enable()
 player = F.FluidSynth2Player('GeneralUser_GS_v1.471.sf2')
 player.Load('0101_speed-the-plough.midi')
 
+print('Supports tempo change while playing:', player.supports_tempo_change_while_playing)
+print('Playback rate', player.PlaybackRate)
 print('Unit is MIDI tick:', player.unit_is_midi_tick)
 print('Total length:', player.Length())
+ 
+input('Press return to play')
 
-print('Playing')
 player.Play()
 print('is_playing, is_paused:', player.is_playing, player.is_paused)
 
@@ -35,6 +38,16 @@ input('Press return to restart at the beginning')
 
 player.Play()
 
+input('Press return to stop')
+
+player.Stop()
+
+input('Press return to restart at the beginning at double speed')
+
+player.PlaybackRate = 2.0
+
+player.Play()
+print('Playback rate', player.PlaybackRate)
 input('Press return to load and play a new tune')
 
 player.Load('0102_morpeth-rant.midi')

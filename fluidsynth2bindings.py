@@ -58,5 +58,11 @@ fluidsynth.fluid_player_get_current_tick.restype = c_int
 fluidsynth.fluid_player_seek.argtypes = [c_void_p, c_int]
 fluidsynth.fluid_player_seek.restype = c_int
 
+fluidsynth.fluid_player_get_bpm.argtypes = [c_void_p]
+fluidsynth.fluid_player_get_bpm.restype = c_int
+
+fluidsynth.fluid_player_set_bpm.argtypes = [c_void_p, c_int]
+fluidsynth.fluid_player_set_bpm.restype = c_int
+
 fluidsynth.delete_fluid_player.argtypes = [c_void_p]
 

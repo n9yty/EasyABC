@@ -2,6 +2,7 @@
 
 from ctypes import c_double, c_char_p
 import os
+import time
 
 import faulthandler
 
@@ -37,11 +38,7 @@ class FluidSynth2Player(MidiPlayer):
 
         self.synth = F.new_fluid_synth(st)
         self.sfid = F.fluid_synth_sfload(self.synth, c_char_p(b(sf2_path)), 0)
-        print(self.sfid)
         F.fluid_synth_program_select(self.synth, 0, self.sfid, 0, 0)
-
-        print(self.settings, st)
-        print(self.synth)
 
         self.audio_driver = F.new_fluid_audio_driver(st, self.synth)
         if not self.audio_driver:   # API returns 0 on error (not None)
@@ -61,7 +58,15 @@ class FluidSynth2Player(MidiPlayer):
 
     @property
     def supports_tempo_change_while_playing(self):
-        return False
+        return True
+
+    @property
+    def PlaybackRate(self):
+        return F.fluid_player_get_bpm(self.player) / 100
+
+    @PlaybackRate.setter
+    def PlaybackRate(self, value):
+        F.fluid_player_set_bpm(self.player, int(100 * value))
 
     @property
     def unit_is_midi_tick(self):
@@ -73,9 +78,10 @@ class FluidSynth2Player(MidiPlayer):
         self.pause_position = 0
 
     def Stop(self):
-        F.fluid_player_stop(self.player)
-        self.pause_position = 0
-        self.OnAfterStop.fire()
+        if self.is_playing:
+            F.fluid_player_stop(self.player)
+            self.pause_position = 0
+            self.OnAfterStop.fire()
 
     def Pause(self):
         F.fluid_player_stop(self.player)
@@ -87,9 +93,18 @@ class FluidSynth2Player(MidiPlayer):
             return False
         status = F.fluid_player_add(self.player, b(path))
         if status >= 0:
-            self.OnAfterLoad.fire()
+            # This is a spectacular hack - fluid_player_get_total_ticks()
+            # only works once playback has started so we play the first
+            # tenth of a second of the track (which seems to amount to the
+            # first note) when the track is loaded. EasyABC seems to do
+            # Load() immediately followed by Play() when you click play
+            # on a new track so this *almost* works but there's slight
+            # rhythm break
             F.fluid_player_play(self.player)
+            time.sleep(0.1)
             F.fluid_player_stop(self.player)
+            self.pause_position = self.Tell()
+            self.OnAfterLoad.fire()
             return True
         return False
 
