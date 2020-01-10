@@ -1,6 +1,6 @@
 #
 
-program_name = 'EasyABC 1.3.7.8 2019-10-09'
+program_name = 'EasyABC 1.3.7.8 2020-01-10'
 
 # Copyright (C) 2011-2014 Nils Liberg (mail: kotorinl at yahoo.co.uk)
 # Copyright (C) 2015-2019 Seymour Shlien (mail: fy733@ncf.ca), Jan Wybren de Jong (jw_de_jong at yahoo dot com)
@@ -112,12 +112,11 @@ from wx import GetTranslation as _
 from wxhelper import *
 # from midiplayer import *
 fluidsynth_available = False
-if wx.Platform != "__WXMAC__":
-    try:
-        from fluidsynthplayer import *
-        fluidsynth_available = True
-    except:
-        pass
+try:
+    from fluidsynth2player import *
+    fluidsynth_available = True
+except:
+    pass
 
 from wxmediaplayer import *
 from xml2abc_interface import xml_to_abc, abc_to_xml
@@ -3665,7 +3664,7 @@ class MainFrame(wx.Frame):
         soundfont_path = settings.get('soundfont_path', None)
         if fluidsynth_available and soundfont_path and os.path.exists(soundfont_path):
             try:
-                self.mc = FluidSynthPlayer(soundfont_path)
+                self.mc = FluidSynth2Player(soundfont_path)
             except Exception as e:
                 error_msg = ''.join(traceback.format_exception(sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2])) + os.linesep + os.linesep.join(errors)
                 self.mc = None
