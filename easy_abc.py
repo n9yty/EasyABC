@@ -3662,6 +3662,7 @@ class MainFrame(wx.Frame):
         self.load_settings()
         
         soundfont_path = settings.get('soundfont_path', None)
+        print('SoundFont:', soundfont_path)
         if fluidsynth_available and soundfont_path and os.path.exists(soundfont_path):
             try:
                 self.mc = FluidSynth2Player(soundfont_path)
@@ -7950,6 +7951,10 @@ class MainFrame(wx.Frame):
                 #msg = 'The executable '+ps2pdf_path+' could not be found.'
                 #dlg = wx.MessageDialog(self, wsg,'Warning', wx.OK)
                 #dlg.ShowModal()
+
+        sf_path = settings.get('soundfont_path')
+        if not sf_path:
+            settings['soundfont_path'] = os.path.join(cwd, 'GeneralUser_GS_v1.471.sf2')
 
 
         #print 'ps2pdf_path = ',ps2pdf_path
