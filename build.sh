@@ -12,3 +12,6 @@ mkdir "dist/EasyABC.app/Contents/Resources/English.lproj"
 
 mkdir dist/EasyABC.app/Contents/Helpers
 cp bin/* dist/EasyABC.app/Contents/Helpers
+
+# The above fails because there are dirs in bin for the mac architectures, so ensure we exit with 0
+exit 0
