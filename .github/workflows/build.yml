@@ -1,0 +1,92 @@
+name: Build Universal macOS DMG
+# on: push
+on:
+  workflow_dispatch:  # Allow manual trigger from Actions tab
+
+jobs:
+  build:
+    runs-on: macos-14 # Uses Apple Silicon M1 runner natively
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install DMG Builder Tool
+        run: brew install create-dmg
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+           python3 -m venv venv
+           source venv/bin/activate
+           pip install --upgrade pip
+           pip install pyinstaller
+           # Let your requirements file naturally handle py2app and dependencies
+           pip install -r requirements.txt
+
+      - name: Fix Architecture Binaries & Execute Build
+        run: |
+          source venv/bin/activate
+          chmod +x build.sh build__dmg.sh
+          
+          # 1. Dynamically stitch arm64 and x86_64 binaries into fat universal files
+          echo "Fusing architecture-specific helper binaries into Universal Binaries..."
+          for file in bin/mac_arm64/*; do
+            filename=$(basename "$file")
+            if [ -f "bin/mac_x86_64/$filename" ]; then
+              lipo -create "bin/mac_arm64/$filename" "bin/mac_x86_64/$filename" -output "bin/$filename"
+              echo "  Created universal binary for: $filename"
+            fi
+          done
+
+          # 2. Run the original foundational build script 
+          # Now `cp bin/* dist/EasyABC.app/Contents/Helpers` will grab the newly created universal files!
+          ./build.sh
+          
+          # 3. Generate the final DMG package
+          # echo "Bypassing interactive DMG layout prompts..."
+          # printf "\n\n" | ./build__dmg.sh
+
+          # 3. Replicate build__dmg.sh file layout using a temporary Staging Directory
+          echo "Setting up DMG staging directory..."
+          mkdir -p dmg_staging
+          
+          # Copy extra contents from your source directory (mirroring cp -R "$SRC_DIR/" "$TEMP_VOL/")
+          # Assuming extra assets are in a folder called 'Resources' or similar—adjust path if needed:
+          if [ -d "dmg" ]; then
+            cp -R dmg/* dmg_staging/
+          fi
+
+          if [ ! -f "dmg_staging/Ghostscript.pkg" ]; then
+              echo "  Warning: Ghostscript.pkg not present, downloading it from https://pages.uoregon.edu/koch/"
+              curl https://pages.uoregon.edu/koch/Ghostscript-10.07.1.pkg -o "dmg_staging/Ghostscript.pkg"
+          fi
+
+          # Move your freshly built application into the staging folder
+          cp -R dist/EasyABC.app dmg_staging/
+
+          # 4. Use create-dmg targeting the folder instead of a single file
+          # (create-dmg automatically generates the Applications symlink via --app-drop-link)
+          create-dmg \
+            --volname "EasyABC Installer" \
+            --background "img/abclogo.png" \
+            --window-pos 200 120 \
+            --window-size 600 420 \
+            --icon-size 60 \
+            --icon "EasyABC.app" 110 120 \
+            --app-drop-link 370 120 \
+            --icon "README" 100 250 \
+            --icon "Ghostscript.pkg" 270 250 \
+            --icon "Install_Ghostscript.webloc" 440 250 \
+            "EasyABC-Universal.dmg" \
+            "dmg_staging/"
+
+      - name: Upload Finished DMG Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EasyABC-Universal-DMG
+          path: EasyABC-Universal.dmg
