@@ -67,12 +67,21 @@ jobs:
             fi
           done
 
-          # 5. Overwrite the default pip environment copy with our universal setup
-          # Using python3 -m pip show ensures we extract the real active path accurately
-          SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
-          rm -rf "$SITE_PACKAGES/wx" "$SITE_PACKAGES/[wW][xX][pP]ython"*
-          cp -R /tmp/wx_universal/wx "$SITE_PACKAGES/"
-          cp -R /tmp/wx_universal/[wW][xX][pP]ython*.dist-info "$SITE_PACKAGES/"
+          # 5. Overwrite BOTH the venv copy and the system toolcache copy with our universal setup
+          VENV_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
+          SYS_PACKAGES="/Library/Frameworks/Python.framework/Versions/3.10/lib/python3.10/site-packages"
+
+          # Sync to Virtual Environment
+          rm -rf "$VENV_PACKAGES/wx" "$VENV_PACKAGES/[wW][xX][pP]ython"*
+          cp -R /tmp/wx_universal/wx "$VENV_PACKAGES/"
+          cp -R /tmp/wx_universal/[wW][xX][pP]ython*.dist-info "$VENV_PACKAGES/"
+
+          # Sync to System Fallback Directory (Where host runners sometimes scrape)
+          sudo rm -rf "$SYS_PACKAGES/wx" "$SYS_PACKAGES/[wW][xX][pP]ython"*
+          sudo cp -R /tmp/wx_universal/wx "$SYS_PACKAGES/"
+          sudo cp -R /tmp/wx_universal/[wW][xX][pP]ython*.dist-info "$SYS_PACKAGES/"
+
+
 
       - name: Install Dependencies
         run: |
