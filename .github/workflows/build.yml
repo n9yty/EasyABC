@@ -103,6 +103,10 @@ jobs:
             fi
           done
 
+          # Force python setup.py parameters to override py2app's automatic recipes
+          # We call py2app manually with exclusions before running build.sh to create the directory baseline safely
+          python setup.py py2app --excludes=PyInstaller
+
           # 2. Run the original foundational build script 
           # Now `cp bin/* dist/EasyABC.app/Contents/Helpers` will grab the newly created universal files!
           ./build.sh
