@@ -19,21 +19,58 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Universal2 wxPython and Dependencies
-        env:
-          ARCHFLAGS: "-arch arm64 -arch x86_64"
-          _PYTHON_HOST_PLATFORM: "macosx-11.0-universal2"
-          MACOSX_DEPLOYMENT_TARGET: "11.0"
-        run: |
-          python3 -m venv venv
-          source venv/bin/activate
+#      - name: Install Universal2 wxPython and Dependencies
+#        env:
+#          ARCHFLAGS: "-arch arm64 -arch x86_64"
+#          _PYTHON_HOST_PLATFORM: "macosx-11.0-universal2"
+#          MACOSX_DEPLOYMENT_TARGET: "11.0"
+#        run: |
+#          python3 -m venv venv
+#          source venv/bin/activate
+#
+#          python3 -m pip install --upgrade pip setuptools wheel
+#          
+#          # Force pip to download/compile a universal2 wheel of wxpython
+#          # Note: If PyPI doesn't have a matching pre-built universal2 wheel for your exact Python microversion,
+#          # pip will automatically safely handle the dual-slice cross-compilation here.
+#          pip install --no-binary wxPython wxPython
 
-          python3 -m pip install --upgrade pip setuptools wheel
-          
-          # Force pip to download/compile a universal2 wheel of wxpython
-          # Note: If PyPI doesn't have a matching pre-built universal2 wheel for your exact Python microversion,
-          # pip will automatically safely handle the dual-slice cross-compilation here.
-          pip install --no-binary wxPython wxPython
+      - name: Fetch and Stitch Complete Universal wxPython Environment
+        run: |
+          python -m pip install --upgrade pip setuptools wheel py2app
+
+          # Create staging directories for each architecture slice
+          mkdir -p /tmp/wx_intel /tmp/wx_arm /tmp/wx_universal
+
+          # 1. Download and extract the native Intel (x86_64) wheel
+          pip download wxPython --platform macosx_10_10_x86_64 --only-binary=:all: --dest /tmp/wx_intel
+          unzip /tmp/wx_intel/wxPython*.whl -d /tmp/wx_intel/extracted
+
+          # 2. Download and extract the native Apple Silicon (arm64) wheel
+          pip download wxPython --platform macosx_11_0_arm64 --only-binary=:all: --dest /tmp/wx_arm
+          unzip /tmp/wx_arm/wxPython*.whl -d /tmp/wx_arm/extracted
+
+          # 3. Clone the entire file system structure from the ARM bundle to start
+          cp -R /tmp/wx_arm/extracted/* /tmp/wx_universal/
+
+          # 4. Use lipo to recursively find and combine all .so AND .dylib files
+          cd /tmp/wx_universal/wx
+          find . -type f \( -name "*.so" -o -name "*.dylib" \) | while read -r file; do
+            intel_bin="/tmp/wx_intel/extracted/wx/$file"
+            arm_bin="/tmp/wx_arm/extracted/wx/$file"
+            
+            # If the compiled binary exists in both source wheels, merge them into a universal binary
+            if [ -f "$intel_bin" ] && [ -f "$arm_bin" ]; then
+              echo "Stitching binary asset: $file"
+              lipo -create "$intel_bin" "$arm_bin" -output "$file"
+            fi
+          done
+
+          # 5. Overwrite the default pip environment copy with our universal setup
+          SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
+          rm -rf "$SITE_PACKAGES/wx" "$SITE_PACKAGES/wxPython"*
+          cp -R /tmp/wx_universal/wx "$SITE_PACKAGES/"
+          cp -R /tmp/wx_universal/wxPython*.dist-info "$SITE_PACKAGES/"
 
       - name: Install Dependencies
         run: |
