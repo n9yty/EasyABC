@@ -19,6 +19,19 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Create Virtual Environment and Install Base Requirements
+        env:
+          ARCHFLAGS: "-arch arm64 -arch x86_64"
+          _PYTHON_HOST_PLATFORM: "macosx-11.0-universal2"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install pyinstaller
+          # Let requirements.txt install normal packages first
+          pip install -r requirements.txt
+
 #      - name: Install Universal2 wxPython and Dependencies
 #        env:
 #          ARCHFLAGS: "-arch arm64 -arch x86_64"
@@ -80,17 +93,6 @@ jobs:
           sudo rm -rf "$SYS_PACKAGES/wx" "$SYS_PACKAGES/[wW][xX][pP]ython"*
           sudo cp -R /tmp/wx_universal/wx "$SYS_PACKAGES/"
           sudo cp -R /tmp/wx_universal/[wW][xX][pP]ython*.dist-info "$SYS_PACKAGES/"
-
-
-
-      - name: Install Dependencies
-        run: |
-           python3 -m venv venv
-           source venv/bin/activate
-           pip install --upgrade pip
-           pip install pyinstaller
-           # Let your requirements file naturally handle py2app and dependencies
-           pip install -r requirements.txt
 
       - name: Fix Architecture Binaries & Execute Build
         env:
