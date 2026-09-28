@@ -1,6 +1,7 @@
 #rm reference.txt generalmidi.txt abcm2ps_osx abc2midi_osx abc2abc_osx
 #rm -fr dist/EasyABC.app
-ARCHFLAGS="-arch arm64 -arch x86_64" _PYTHON_HOST_PLATFORM="macosx-11.0-universal2" python setup.py py2app
+ARCHFLAGS="-arch arm64 -arch x86_64" _PYTHON_HOST_PLATFORM="macosx-11.0-universal2" arch -arch arm64 -arch x86_64 python setup.py py2app --semi-standalone
+
 #cp -r reference.txt generalmidi.txt img locale sound dist/EasyABC.app/Contents/Resources
 #cp -r bin/abcm2ps bin/abc2midi bin/abc2abc dist/EasyABC.app/Contents/Resources/bin
 for file in `ls -1 locale/`; do 
