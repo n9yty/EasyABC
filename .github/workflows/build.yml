@@ -19,6 +19,22 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install Universal2 wxPython and Dependencies
+        env:
+          ARCHFLAGS: "-arch arm64 -arch x86_64"
+          _PYTHON_HOST_PLATFORM: "macosx-11.0-universal2"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+
+          python3 -m pip install --upgrade pip setuptools wheel
+          
+          # Force pip to download/compile a universal2 wheel of wxpython
+          # Note: If PyPI doesn't have a matching pre-built universal2 wheel for your exact Python microversion,
+          # pip will automatically safely handle the dual-slice cross-compilation here.
+          pip install --no-binary wxPython wxPython
+
       - name: Install Dependencies
         run: |
            python3 -m venv venv
@@ -29,6 +45,11 @@ jobs:
            pip install -r requirements.txt
 
       - name: Fix Architecture Binaries & Execute Build
+        env:
+          ARCHFLAGS: "-arch arm64 -arch x86_64"
+          _PYTHON_HOST_PLATFORM: "macosx-11.0-universal2"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+
         run: |
           source venv/bin/activate
           chmod +x build.sh build__dmg.sh
