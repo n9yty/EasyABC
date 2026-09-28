@@ -43,12 +43,13 @@ jobs:
           mkdir -p /tmp/wx_intel /tmp/wx_arm /tmp/wx_universal
 
           # 1. Download and extract the native Intel (x86_64) wheel
+          # We use case-insensitive matching [wW][xX]python*.whl to guarantee unzip finds it
           pip download wxPython --platform macosx_10_10_x86_64 --only-binary=:all: --dest /tmp/wx_intel
-          unzip /tmp/wx_intel/wxPython*.whl -d /tmp/wx_intel/extracted
+          unzip /tmp/wx_intel/[wW][xX]python*.whl -d /tmp/wx_intel/extracted
 
           # 2. Download and extract the native Apple Silicon (arm64) wheel
           pip download wxPython --platform macosx_11_0_arm64 --only-binary=:all: --dest /tmp/wx_arm
-          unzip /tmp/wx_arm/wxPython*.whl -d /tmp/wx_arm/extracted
+          unzip /tmp/wx_arm/[wW][xX]python*.whl -d /tmp/wx_arm/extracted
 
           # 3. Clone the entire file system structure from the ARM bundle to start
           cp -R /tmp/wx_arm/extracted/* /tmp/wx_universal/
@@ -67,10 +68,11 @@ jobs:
           done
 
           # 5. Overwrite the default pip environment copy with our universal setup
+          # Using python3 -m pip show ensures we extract the real active path accurately
           SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
-          rm -rf "$SITE_PACKAGES/wx" "$SITE_PACKAGES/wxPython"*
+          rm -rf "$SITE_PACKAGES/wx" "$SITE_PACKAGES/[wW][xX][pP]ython"*
           cp -R /tmp/wx_universal/wx "$SITE_PACKAGES/"
-          cp -R /tmp/wx_universal/wxPython*.dist-info "$SITE_PACKAGES/"
+          cp -R /tmp/wx_universal/[wW][xX][pP]ython*.dist-info "$SITE_PACKAGES/"
 
       - name: Install Dependencies
         run: |
