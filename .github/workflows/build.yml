@@ -158,6 +158,9 @@ jobs:
             "EasyABC-Universal.dmg" \
             "dmg_staging/"
 
+          # Force an ad-hoc signature on your final output DMG
+          codesign --force --sign - EasyABC-Universal.dmg
+
       - name: Upload Finished DMG Artifact
         uses: actions/upload-artifact@v4
         with:
