@@ -49,9 +49,16 @@ jobs:
 #          pip install --no-binary wxPython wxPython
 
       - name: Fetch and Stitch Complete Universal wxPython Environment
+        env:
+          ARCHFLAGS: "-arch arm64 -arch x86_64"
+          _PYTHON_HOST_PLATFORM: "macosx-11.0-universal2"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
           # 1. Prepare global tooling framework tools
           sudo /Library/Frameworks/Python.framework/Versions/3.10/bin/python3 -m pip install --upgrade pip setuptools wheel py2app
+
+          # Force install project dependencies into the system space so py2app can package them
+          sudo /Library/Frameworks/Python.framework/Versions/3.10/bin/python3 -m pip install -r requirements.txt
 
           # Create workspace directories
           mkdir -p /tmp/wx_intel /tmp/wx_arm /tmp/wx_universal
