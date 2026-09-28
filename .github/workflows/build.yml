@@ -67,6 +67,11 @@ jobs:
           # 2. Run the original foundational build script 
           # Now `cp bin/* dist/EasyABC.app/Contents/Helpers` will grab the newly created universal files!
           ./build.sh
+
+      - name: Code Sign Application Bundle
+        run: |
+          # Recursively deep-sign the bundle with an ad-hoc local identity (-)
+          codesign --force --deep --sign - dist/EasyABC.app
           
           # 3. Generate the final DMG package
           # echo "Bypassing interactive DMG layout prompts..."
